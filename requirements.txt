@@ -1,0 +1,4 @@
+pynput
+pywin32; sys_platform == "win32"
+python-telegram-bot
+python-dotenv
