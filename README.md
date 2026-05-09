@@ -43,63 +43,44 @@ Find the `"id"` field inside `"chat"` — that's your Chat ID.
 
 ## Installation on macOS (no experience required)
 
-### 1. Install Python
+### 1. Download FlowBot
 
-Download and install Python 3 from the official site:
-👉 https://www.python.org/downloads/
+Go to 👉 https://github.com/d74rc5x4tk-oss/flowbot, click **Code → Download ZIP**, extract the folder anywhere.
 
-Open the installer and follow the steps. When done, open **Terminal** (press `Cmd + Space`, type `Terminal`, press Enter).
+### 2. Run
 
-### 2. Download FlowBot
-
-In Terminal, run these commands one by one:
-
-```bash
-curl -L https://github.com/d74rc5x4tk-oss/flowbot/archive/refs/heads/main.zip -o flowbot.zip
-unzip flowbot.zip
-cd flowbot-main
-```
-
-### 3. Install dependencies
-
-```bash
-pip3 install uv
-uv venv .venv
-uv pip install -r requirements.txt --python .venv/bin/python
-```
-
-### 4. Configure your tokens
-
-```bash
-cp .env.example .env
-open -e .env
-```
-
-A text editor will open. Fill in your values:
-```
-BOT_TOKEN=your_bot_token_here
-CHAT_ID=your_chat_id_here
-TODOIST_TOKEN=your_todoist_token_here  # optional
-```
-Save and close the file.
-
-### 5. Run
+Open **Terminal** (`Cmd + Space` → type `Terminal` → Enter), then drag the extracted folder into the Terminal window and press Enter to navigate into it. Then run:
 
 ```bash
 bash start.sh
 ```
 
-> **macOS note:** On first run, macOS will ask for permission to monitor keyboard/mouse input.
+**That's it.** The script will:
+- Download and install Python automatically if needed
+- Install all dependencies
+- Open `.env` for you to fill in your tokens (BOT_TOKEN and CHAT_ID)
+- Start the bot
+
+> **macOS note:** On first run, macOS may ask for Accessibility permission.
 > Go to **System Settings → Privacy & Security → Accessibility** and allow Terminal.
 
 ---
 
-## Installation on Windows
+## Installation on Windows (no experience required)
 
-1. Install Python 3 from https://www.python.org/downloads/ (check "Add to PATH" during install)
-2. Download the ZIP from GitHub and extract it
-3. Copy `.env.example` to `.env` and fill in your tokens
-4. Double-click `start.bat`
+### 1. Download FlowBot
+
+Go to 👉 https://github.com/d74rc5x4tk-oss/flowbot, click **Code → Download ZIP**, extract the folder anywhere.
+
+### 2. Run
+
+Double-click **`start.bat`**
+
+**That's it.** The script will:
+- Download and install Python automatically if needed
+- Install all dependencies
+- Open `.env` for you to fill in your tokens (BOT_TOKEN and CHAT_ID)
+- Start the bot
 
 ---
 
