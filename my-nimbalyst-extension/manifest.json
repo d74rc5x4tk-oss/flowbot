@@ -1,0 +1,9 @@
+{
+  "id": "com.developer.my-nimbalyst-extension",
+  "name": "My Nimbalyst Extension",
+  "version": "1.0.0",
+  "description": "Starter scaffold for My Nimbalyst Extension",
+  "main": "dist/index.js",
+  "apiVersion": "1.0.0",
+  "contributions": {}
+}
