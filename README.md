@@ -1,71 +1,118 @@
-# Activity Monitor — Focus Bot
+# FlowBot — Telegram Focus Bot
 
-Telegram-бот который следит за активностью на компьютере и помогает держать фокус.
+A Telegram bot that monitors your PC/Mac activity and helps you stay focused. Built for people with ADHD and anyone who wants to build better work habits.
 
-## Что делает
+## Features
 
-- Уведомляет в Telegram если 5 минут не было активности мыши/клавиатуры
-- Обнаруживает отвлекающие сайты (YouTube, Instagram, TikTok и др.) и присылает предупреждение каждые 5 секунд
-- Управление рабочим днём через кнопки: перерывы (4×15 мин) и обед (1×60 мин)
-- Состояние сохраняется при перезапуске
+- Sends a Telegram notification if no mouse/keyboard activity for 5 minutes
+- Detects distracting websites (YouTube, Instagram, TikTok, etc.) and warns you every 5 seconds
+- Work day management via inline buttons: short breaks (4×15 min) and lunch (1×60 min)
+- Planning phase at the start of each day (10 min to set up tasks)
+- Streak system: calendar streaks, Mon–Fri workday streaks, distraction-free streaks
+- Achievements and end-of-day productivity report
+- Todoist integration in daily report (optional)
+- State is saved on restart
 
-## Поддерживаемые платформы
+## Platform Support
 
-| Функция | Windows | macOS |
+| Feature | Windows | macOS |
 |---|---|---|
-| Уведомления о бездействии | ✅ | ✅ |
-| Обнаружение вкладок (Chrome/Safari/Firefox) | ✅ | ✅ |
-| Telegram бот | ✅ | ✅ |
+| Idle notifications | ✅ | ✅ |
+| Distraction detection (Chrome/Safari/Firefox) | ✅ | ✅ |
+| Telegram bot | ✅ | ✅ |
 
-## Установка
+---
 
-### 1. Создать Telegram бота
+## Setup
 
-1. Открой [@BotFather](https://t.me/BotFather) в Telegram
-2. Напиши `/newbot` и следуй инструкциям
-3. Скопируй полученный токен
+### Step 1 — Create a Telegram bot
 
-### 2. Получить свой Chat ID
+1. Open [@BotFather](https://t.me/BotFather) in Telegram
+2. Send `/newbot` and follow the instructions
+3. Copy the bot token you receive
 
-Напиши любое сообщение своему боту, затем открой:
+### Step 2 — Get your Chat ID
+
+Send any message to your new bot, then open this URL in a browser:
 ```
-https://api.telegram.org/bot<TOKEN>/getUpdates
+https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates
 ```
-Найди поле `"id"` внутри `"chat"`.
+Find the `"id"` field inside `"chat"` — that's your Chat ID.
 
-### 3. Установить зависимости
+---
+
+## Installation on macOS (no experience required)
+
+### 1. Install Python
+
+Download and install Python 3 from the official site:
+👉 https://www.python.org/downloads/
+
+Open the installer and follow the steps. When done, open **Terminal** (press `Cmd + Space`, type `Terminal`, press Enter).
+
+### 2. Download FlowBot
+
+In Terminal, run these commands one by one:
 
 ```bash
-# Установить uv (если нет)
-pip install uv
+curl -L https://github.com/d74rc5x4tk-oss/flowbot/archive/refs/heads/main.zip -o flowbot.zip
+unzip flowbot.zip
+cd flowbot-main
+```
 
-# Создать окружение и установить пакеты
+### 3. Install dependencies
+
+```bash
+pip3 install uv
 uv venv .venv
-uv pip install -r requirements.txt --python .venv/Scripts/python.exe  # Windows
-uv pip install -r requirements.txt --python .venv/bin/python           # macOS
+uv pip install -r requirements.txt --python .venv/bin/python
 ```
 
-### 4. Настроить .env
+### 4. Configure your tokens
 
-Скопируй `.env.example` в `.env` и заполни:
-```
-BOT_TOKEN=твой_токен_здесь
-CHAT_ID=твой_chat_id_здесь
-```
-
-### 5. Запустить
-
-**Windows:** двойной клик на `start.bat`
-
-**macOS:**
 ```bash
-.venv/bin/python main.py
+cp .env.example .env
+open -e .env
 ```
 
-> На macOS потребуется разрешить доступ к специальным возможностям (Accessibility) в System Settings → Privacy & Security → Accessibility
+A text editor will open. Fill in your values:
+```
+BOT_TOKEN=your_bot_token_here
+CHAT_ID=your_chat_id_here
+TODOIST_TOKEN=your_todoist_token_here  # optional
+```
+Save and close the file.
 
-## Отвлекающие сайты
+### 5. Run
 
-По умолчанию отслеживаются: YouTube, ВКонтакте, Instagram, TikTok, Twitch, Netflix, КиноПоиск, Twitter/X, Facebook.
+```bash
+bash start.sh
+```
 
-Список можно изменить в `monitor.py` → `DISTRACTING_APPS`.
+> **macOS note:** On first run, macOS will ask for permission to monitor keyboard/mouse input.
+> Go to **System Settings → Privacy & Security → Accessibility** and allow Terminal.
+
+---
+
+## Installation on Windows
+
+1. Install Python 3 from https://www.python.org/downloads/ (check "Add to PATH" during install)
+2. Download the ZIP from GitHub and extract it
+3. Copy `.env.example` to `.env` and fill in your tokens
+4. Double-click `start.bat`
+
+---
+
+## Distracting sites
+
+Tracked by default: YouTube, Instagram, TikTok, Twitch, Netflix, Twitter/X, Facebook, VK, Kinopoisk.
+
+To edit the list, open `monitor.py` and find `DISTRACTING_APPS`.
+
+---
+
+## Autostart on Windows
+
+To make FlowBot start automatically with Windows:
+1. Press `Win + R`, type `shell:startup`, press Enter
+2. Create a shortcut to `start.bat` in that folder
