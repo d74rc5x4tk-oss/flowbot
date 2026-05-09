@@ -7,72 +7,91 @@ echo "  FlowBot — Focus Telegram Bot"
 echo "=========================================="
 echo ""
 
-# ── Check .env ─────────────────────────────────────────────────────────────────
+# ── Helper: find working python3 >= 3.11 ──────────────────────────────────────
+find_python() {
+    for py in python3 /usr/local/bin/python3 /usr/bin/python3 \
+              /Library/Frameworks/Python.framework/Versions/3.13/bin/python3 \
+              /Library/Frameworks/Python.framework/Versions/3.12/bin/python3 \
+              /Library/Frameworks/Python.framework/Versions/3.11/bin/python3; do
+        if command -v "$py" &>/dev/null 2>&1; then
+            local minor
+            minor=$("$py" -c "import sys; print(sys.version_info.minor)" 2>/dev/null)
+            if [ -n "$minor" ] && [ "$minor" -ge 11 ]; then
+                echo "$py"
+                return 0
+            fi
+        fi
+    done
+    return 1
+}
+
+# ── Step 1: .env ───────────────────────────────────────────────────────────────
 if [ ! -f ".env" ]; then
     cp .env.example .env
-    echo "[!] Created .env from template."
-    echo "    Fill in BOT_TOKEN and CHAT_ID, save the file, then run start.command again."
-    open -e .env 2>/dev/null || nano .env
-    exit 1
 fi
+
 if grep -q "your_token_here\|your_chat_id_here" .env; then
-    echo "[!] Please fill in your BOT_TOKEN and CHAT_ID in the .env file first."
-    open -e .env 2>/dev/null || nano .env
-    exit 1
-fi
+    echo "[!] Нужно заполнить токены в файле .env"
+    echo "    Открываю файл..."
+    open -e .env
+    echo ""
+    echo "    Заполни BOT_TOKEN и CHAT_ID, сохрани файл (Cmd+S),"
+    echo -n "    затем нажми Enter здесь чтобы продолжить... "
+    read -r
 
-# ── Check Python version ───────────────────────────────────────────────────────
-MIN_MAJOR=3
-MIN_MINOR=11
-INSTALL_VER="3.13.3"
-NEED_PYTHON=0
-
-if command -v python3 &>/dev/null; then
-    PY_MAJOR=$(python3 -c "import sys; print(sys.version_info.major)" 2>/dev/null)
-    PY_MINOR=$(python3 -c "import sys; print(sys.version_info.minor)" 2>/dev/null)
-    PY_VER=$(python3 --version 2>&1 | awk '{print $2}')
-
-    if [ "$PY_MAJOR" -lt "$MIN_MAJOR" ] || { [ "$PY_MAJOR" -eq "$MIN_MAJOR" ] && [ "$PY_MINOR" -lt "$MIN_MINOR" ]; }; then
-        echo "[*] Python $PY_VER is too old (need ${MIN_MAJOR}.${MIN_MINOR}+). Updating..."
-        NEED_PYTHON=1
-    else
-        echo "[+] Python $PY_VER OK"
+    if grep -q "your_token_here\|your_chat_id_here" .env; then
+        echo "[!] Токены не заполнены. Запусти файл ещё раз."
+        exit 1
     fi
-else
-    echo "[*] Python not found."
-    NEED_PYTHON=1
 fi
+echo "[+] Токены OK"
 
-if [ "$NEED_PYTHON" -eq 1 ]; then
-    echo "[*] Downloading Python $INSTALL_VER..."
+# ── Step 2: Python ─────────────────────────────────────────────────────────────
+PYTHON3=$(find_python)
+
+if [ -z "$PYTHON3" ]; then
+    INSTALL_VER="3.13.3"
+    echo "[*] Python не найден. Скачиваю Python $INSTALL_VER..."
     PKG="/tmp/python_installer.pkg"
-    curl -L "https://www.python.org/ftp/python/${INSTALL_VER}/python-${INSTALL_VER}-macos11.pkg" -o "$PKG"
+    curl -L --progress-bar "https://www.python.org/ftp/python/${INSTALL_VER}/python-${INSTALL_VER}-macos11.pkg" -o "$PKG"
     if [ $? -ne 0 ]; then
-        echo "[!] Download failed. Please install Python from https://www.python.org"
+        echo "[!] Ошибка скачивания. Установи Python вручную: https://www.python.org"
         exit 1
     fi
     echo ""
-    echo "[*] Opening Python installer..."
-    echo "    Complete the installation, then run start.command again."
+    echo "[*] Открываю установщик Python..."
     open "$PKG"
-    exit 0
+    echo ""
+    echo "    Установи Python через открывшийся установщик (нажимай Продолжить → Установить)."
+    echo -n "    Когда установка завершится — нажми Enter здесь... "
+    read -r
+    echo ""
+
+    PYTHON3=$(find_python)
+    if [ -z "$PYTHON3" ]; then
+        echo "[!] Python всё ещё не найден. Попробуй запустить файл заново."
+        exit 1
+    fi
 fi
 
-# ── Check uv ───────────────────────────────────────────────────────────────────
-if ! python3 -m uv --version &>/dev/null 2>&1; then
-    echo "[*] Installing uv..."
-    python3 -m pip install uv --quiet
+PY_VER=$("$PYTHON3" --version 2>&1 | awk '{print $2}')
+echo "[+] Python $PY_VER OK"
+
+# ── Step 3: uv ─────────────────────────────────────────────────────────────────
+if ! "$PYTHON3" -m uv --version &>/dev/null 2>&1; then
+    echo "[*] Устанавливаю uv..."
+    "$PYTHON3" -m pip install uv --quiet
 fi
 
-# ── Setup virtual environment ──────────────────────────────────────────────────
+# ── Step 4: Virtual environment ────────────────────────────────────────────────
 if [ ! -d ".venv" ]; then
-    echo "[*] Setting up environment and installing dependencies..."
-    python3 -m uv venv .venv
-    python3 -m uv pip install -r requirements.txt --python .venv/bin/python
-    echo "[+] Setup complete!"
+    echo "[*] Устанавливаю зависимости..."
+    "$PYTHON3" -m uv venv .venv
+    "$PYTHON3" -m uv pip install -r requirements.txt --python .venv/bin/python
+    echo "[+] Готово!"
 fi
 
-# ── Setup LaunchAgent (autostart + background) ────────────────────────────────
+# ── Step 5: LaunchAgent (autostart + background) ──────────────────────────────
 PLIST_DIR="$HOME/Library/LaunchAgents"
 PLIST_FILE="$PLIST_DIR/com.flowbot.plist"
 PYTHON_PATH="$SCRIPT_DIR/.venv/bin/python"
@@ -104,20 +123,20 @@ cat > "$PLIST_FILE" <<PLIST
 </plist>
 PLIST
 
-# Stop previous instance if running
 launchctl unload "$PLIST_FILE" 2>/dev/null
 sleep 1
-
-# Start in background
 launchctl load "$PLIST_FILE"
 
 echo ""
-echo "[+] FlowBot запущен в фоне!"
-echo "    Автозапуск при входе в систему — настроен."
+echo "=========================================="
+echo "  FlowBot запущен!"
 echo ""
-echo "[i] Если macOS запросит доступ к Accessibility:"
-echo "    Системные настройки → Конфиденциальность → Универсальный доступ → разрешить Терминал"
+echo "  Работает в фоне — окно можно закрыть"
+echo "  Запускается автоматически при входе"
+echo "  Иконка появится в меню-баре вверху"
 echo ""
-echo "    Чтобы остановить бота:"
-echo "    launchctl unload ~/Library/LaunchAgents/com.flowbot.plist"
+echo "  Если macOS запросит доступ:"
+echo "  Системные настройки → Конфиденциальность"
+echo "  → Универсальный доступ → разрешить Терминал"
+echo "=========================================="
 echo ""
