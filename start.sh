@@ -1,5 +1,6 @@
 #!/bin/bash
-cd "$(dirname "$0")"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR"
 
 echo "=========================================="
 echo "  FlowBot — Focus Telegram Bot"
@@ -10,7 +11,7 @@ echo ""
 if [ ! -f ".env" ]; then
     cp .env.example .env
     echo "[!] Created .env from template."
-    echo "    Fill in BOT_TOKEN and CHAT_ID, save the file, then run start.sh again."
+    echo "    Fill in BOT_TOKEN and CHAT_ID, save the file, then run start.command again."
     open -e .env 2>/dev/null || nano .env
     exit 1
 fi
@@ -52,7 +53,7 @@ if [ "$NEED_PYTHON" -eq 1 ]; then
     fi
     echo ""
     echo "[*] Opening Python installer..."
-    echo "    Complete the installation, then run start.sh again."
+    echo "    Complete the installation, then run start.command again."
     open "$PKG"
     exit 0
 fi
@@ -71,11 +72,52 @@ if [ ! -d ".venv" ]; then
     echo "[+] Setup complete!"
 fi
 
-# ── Run ────────────────────────────────────────────────────────────────────────
+# ── Setup LaunchAgent (autostart + background) ────────────────────────────────
+PLIST_DIR="$HOME/Library/LaunchAgents"
+PLIST_FILE="$PLIST_DIR/com.flowbot.plist"
+PYTHON_PATH="$SCRIPT_DIR/.venv/bin/python"
+
+mkdir -p "$PLIST_DIR"
+cat > "$PLIST_FILE" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.flowbot</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>$PYTHON_PATH</string>
+        <string>$SCRIPT_DIR/main.py</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>$SCRIPT_DIR</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <false/>
+    <key>StandardOutPath</key>
+    <string>$SCRIPT_DIR/flowbot.log</string>
+    <key>StandardErrorPath</key>
+    <string>$SCRIPT_DIR/flowbot_error.log</string>
+</dict>
+</plist>
+PLIST
+
+# Stop previous instance if running
+launchctl unload "$PLIST_FILE" 2>/dev/null
+sleep 1
+
+# Start in background
+launchctl load "$PLIST_FILE"
+
 echo ""
-echo "[i] First run? If macOS asks for Accessibility permission:"
-echo "    System Settings → Privacy & Security → Accessibility → allow Terminal"
+echo "[+] FlowBot запущен в фоне!"
+echo "    Автозапуск при входе в систему — настроен."
 echo ""
-echo "[+] Starting FlowBot..."
+echo "[i] Если macOS запросит доступ к Accessibility:"
+echo "    Системные настройки → Конфиденциальность → Универсальный доступ → разрешить Терминал"
 echo ""
-.venv/bin/python main.py
+echo "    Чтобы остановить бота:"
+echo "    launchctl unload ~/Library/LaunchAgents/com.flowbot.plist"
+echo ""

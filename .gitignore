@@ -22,3 +22,4 @@ PROGRESS.md
 my-nimbalyst-extension/
 error.log
 stderr.log
+*.log
