@@ -3,6 +3,7 @@ import os
 import platform
 import sys
 import traceback
+import threading
 from dotenv import load_dotenv
 from state import AppState
 from monitor import ActivityMonitor
@@ -14,14 +15,24 @@ BOT_TOKEN     = os.getenv("BOT_TOKEN")
 CHAT_ID       = int(os.getenv("CHAT_ID"))
 TODOIST_TOKEN = os.getenv("TODOIST_TOKEN", "")
 
-# ── System tray icon (Windows only) ───────────────────────────────────────────
+SYSTEM = platform.system()
 
-HAS_TRAY = False
-if platform.system() == "Windows":
+# ── Windows tray ───────────────────────────────────────────────────────────────
+HAS_PYSTRAY = False
+if SYSTEM == "Windows":
     try:
         import pystray
         from PIL import Image, ImageDraw
-        HAS_TRAY = True
+        HAS_PYSTRAY = True
+    except ImportError:
+        pass
+
+# ── macOS menu bar ─────────────────────────────────────────────────────────────
+HAS_RUMPS = False
+if SYSTEM == "Darwin":
+    try:
+        import rumps
+        HAS_RUMPS = True
     except ImportError:
         pass
 
@@ -35,8 +46,8 @@ def _make_tray_image():
     return img
 
 
-def _start_tray():
-    if not HAS_TRAY:
+def _start_windows_tray():
+    if not HAS_PYSTRAY:
         return
 
     def on_quit(icon, item):
@@ -56,9 +67,7 @@ def _start_tray():
     icon.run_detached()
 
 
-# ── Entry point ───────────────────────────────────────────────────────────────
-
-async def main():
+async def _async_main():
     state   = AppState()
     bot     = FocusBot(
         token         = BOT_TOKEN,
@@ -71,16 +80,48 @@ async def main():
         on_idle        = bot.notify_idle,
         on_distraction = bot.notify_distraction,
     )
-    _start_tray()
     await bot.run()
     await monitor.run()
 
 
-if __name__ == "__main__":
+def _run_async():
     try:
-        asyncio.run(main())
+        asyncio.run(_async_main())
     except Exception:
         log_path = os.path.join(os.path.dirname(__file__), "error.log")
         with open(log_path, "w", encoding="utf-8") as f:
             traceback.print_exc(file=f)
-        raise
+        os._exit(1)
+
+
+if __name__ == "__main__":
+    if SYSTEM == "Darwin" and HAS_RUMPS:
+        # macOS: asyncio в фоновом потоке, rumps занимает главный поток
+        t = threading.Thread(target=_run_async, daemon=True)
+        t.start()
+
+        class _MenuBarApp(rumps.App):
+            def __init__(self):
+                super().__init__("⚡", quit_button=None)
+                self.menu = [
+                    rumps.MenuItem("FlowBot — работает"),
+                    None,
+                    rumps.MenuItem("Остановить бота", callback=self._quit),
+                ]
+
+            def _quit(self, _):
+                os._exit(0)
+
+        _MenuBarApp().run()
+
+    else:
+        # Windows: иконка в трей, asyncio в главном потоке
+        if SYSTEM == "Windows":
+            _start_windows_tray()
+        try:
+            asyncio.run(_async_main())
+        except Exception:
+            log_path = os.path.join(os.path.dirname(__file__), "error.log")
+            with open(log_path, "w", encoding="utf-8") as f:
+                traceback.print_exc(file=f)
+            raise
