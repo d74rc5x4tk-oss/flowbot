@@ -14,3 +14,11 @@ test_windows.bat
 
 # macOS
 .DS_Store
+
+# Служебные файлы проекта
+PLAN.md
+PROGRESS.md
+.claude/
+my-nimbalyst-extension/
+error.log
+stderr.log
