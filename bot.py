@@ -60,6 +60,26 @@ def _streak_bar(n: int) -> str:
     return "🔥" * min(n, 7) + (f" ×{n}" if n > 7 else "")
 
 
+async def _fetch_todoist_tasks(token: str) -> list[str]:
+    """Возвращает список названий активных задач на сегодня."""
+    if not HAS_HTTPX or not token:
+        return []
+    headers = {"Authorization": f"Bearer {token}"}
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            r = await client.get(
+                "https://api.todoist.com/api/v1/tasks",
+                headers=headers,
+                params={"filter": "today | overdue"},
+            )
+            if r.status_code != 200:
+                return []
+            results = r.json().get("results", [])
+            return [t["content"] for t in results]
+    except Exception:
+        return []
+
+
 async def _fetch_todoist_stats(token: str) -> dict | None:
     """Возвращает {completed, total} задач Todoist за сегодня."""
     if not HAS_HTTPX or not token:
@@ -286,10 +306,17 @@ class FocusBot:
                 await self.clear_chat()
             self._state.start_planning()
             left_min = int(self._state.planning_seconds_left() // 60)
+            tasks = await _fetch_todoist_tasks(self._todoist_token)
+            if tasks:
+                task_lines = "\n".join(f"• {t}" for t in tasks)
+                tasks_block = f"\n\n📌 *Задачи на сегодня:*\n{task_lines}"
+            else:
+                tasks_block = ""
             await self.send_menu(
                 f"📋 *Время планирования!*\n"
                 f"У тебя {left_min} минут чтобы составить план на день в Todoist.\n"
                 f"Когда готов — нажми кнопку ниже."
+                f"{tasks_block}"
             )
             self._schedule_planning_watcher()
 
