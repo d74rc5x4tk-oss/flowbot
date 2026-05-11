@@ -78,6 +78,7 @@ class AppState:
         self.daily_stats: dict = {}           # date_str → {work_sec, break_sec, distractions, score}
         self.language: str = "ru"
         self.startup_notified_date: str = ""
+        self.session_started_date: str = ""
 
         self._load()
 
@@ -108,6 +109,7 @@ class AppState:
                 self.daily_stats         = d.get("daily_stats", {})
                 self.language                = d.get("language", "ru")
                 self.startup_notified_date   = d.get("startup_notified_date", "")
+                self.session_started_date    = d.get("session_started_date", "")
                 if self.mode in ("planning", "working"):
                     self._work_segment_start = _time.time()
                 self._midnight_reset()
@@ -138,6 +140,7 @@ class AppState:
                 "daily_stats":        self.daily_stats,
                 "language":                self.language,
                 "startup_notified_date":   self.startup_notified_date,
+                "session_started_date":    self.session_started_date,
             }, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
@@ -224,9 +227,10 @@ class AppState:
     def start_planning(self):
         self._midnight_reset()
         self._update_streaks_on_start()
-        self.mode              = "planning"
-        self.planning_end_time = _time.time() + PLANNING_MINUTES * 60
-        self._work_segment_start = 0.0
+        self.mode                 = "planning"
+        self.planning_end_time    = _time.time() + PLANNING_MINUTES * 60
+        self._work_segment_start  = 0.0
+        self.session_started_date = date.today().isoformat()
         self.save()
 
     def start_working(self):
@@ -240,9 +244,10 @@ class AppState:
         """Обратная совместимость — сразу рабочий режим без планирования."""
         self._midnight_reset()
         self._update_streaks_on_start()
-        self.mode              = "working"
-        self.planning_end_time = None
-        self._work_segment_start = _time.time()
+        self.mode                 = "working"
+        self.planning_end_time    = None
+        self._work_segment_start  = _time.time()
+        self.session_started_date = date.today().isoformat()
         self.save()
 
     def end_day(self) -> dict:

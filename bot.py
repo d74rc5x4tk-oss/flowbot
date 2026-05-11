@@ -312,7 +312,7 @@ class FocusBot:
         data = query.data
 
         if data == "start":
-            is_new_day = self._state.day_started != date.today().isoformat()
+            is_new_day = self._state.session_started_date != date.today().isoformat()
             if is_new_day:
                 await self.clear_chat()
             self._state.start_planning()
