@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from state import AppState
 from monitor import ActivityMonitor
 from bot import FocusBot
+from i18n import t as _t, os_lang
 
 load_dotenv()
 
@@ -72,15 +73,16 @@ def _start_windows_tray():
         icon.stop()
         os._exit(0)
 
+    lang = os_lang()
     icon = pystray.Icon(
         "FlowBot",
         _make_tray_image(),
-        "FlowBot — работает",
+        _t("tray_running", lang),
         menu=pystray.Menu(
-            pystray.MenuItem("FlowBot — работает", None, enabled=False),
+            pystray.MenuItem(_t("tray_running", lang), None, enabled=False),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Перезапустить бота", on_restart),
-            pystray.MenuItem("Остановить бота", on_quit),
+            pystray.MenuItem(_t("tray_restart", lang), on_restart),
+            pystray.MenuItem(_t("tray_stop", lang), on_quit),
         ),
     )
     icon.run_detached()
@@ -122,11 +124,12 @@ if __name__ == "__main__":
         class _MenuBarApp(rumps.App):
             def __init__(self):
                 super().__init__("⚡", quit_button=None)
+                lang = os_lang()
                 self.menu = [
-                    rumps.MenuItem("FlowBot — работает"),
+                    rumps.MenuItem(_t("tray_running", lang)),
                     None,
-                    rumps.MenuItem("Перезапустить бота", callback=self._restart),
-                    rumps.MenuItem("Остановить бота", callback=self._quit),
+                    rumps.MenuItem(_t("tray_restart", lang), callback=self._restart),
+                    rumps.MenuItem(_t("tray_stop", lang), callback=self._quit),
                 ]
 
             def _restart(self, _):

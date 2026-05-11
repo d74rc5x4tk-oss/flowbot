@@ -7,6 +7,7 @@ from telegram.ext import (
 )
 from state import AppState, MAX_SHORT_BREAKS
 from achievements import check_new_achievements, format_achievement
+from i18n import t, detect_lang
 
 try:
     import httpx
@@ -18,42 +19,43 @@ except ImportError:
 # ── keyboards ─────────────────────────────────────────────────────────────────
 
 def _keyboard_for_state(state: AppState) -> InlineKeyboardMarkup:
+    lang = state.language
     if state.is_off:
         return InlineKeyboardMarkup([
-            [InlineKeyboardButton("▶️ Начать рабочий день", callback_data="start")],
+            [InlineKeyboardButton(t("btn_start", lang), callback_data="start")],
         ])
     if state.is_planning:
         return InlineKeyboardMarkup([
-            [InlineKeyboardButton("✅ Готов, начинаем работать!", callback_data="ready")],
-            [InlineKeyboardButton("⏭ Пропустить планирование", callback_data="skip_plan")],
+            [InlineKeyboardButton(t("btn_ready", lang), callback_data="ready")],
+            [InlineKeyboardButton(t("btn_skip_plan", lang), callback_data="skip_plan")],
         ])
     if state.is_on_break:
         return InlineKeyboardMarkup([
-            [InlineKeyboardButton("🏃 Вернуться к работе досрочно", callback_data="return_break")],
+            [InlineKeyboardButton(t("btn_return_break", lang), callback_data="return_break")],
         ])
     # working
     break_row = []
     if state.can_short_break:
         left = MAX_SHORT_BREAKS - state.short_breaks_today
         break_row.append(InlineKeyboardButton(
-            f"⏸ Перерыв 15 мин ({left} ост.)", callback_data="break_short"
+            t("btn_break_short", lang, left=left), callback_data="break_short"
         ))
     if state.can_long_break:
-        break_row.append(InlineKeyboardButton("🍽 Обед 60 мин", callback_data="break_long"))
+        break_row.append(InlineKeyboardButton(t("btn_lunch", lang), callback_data="break_long"))
     rows = []
     if break_row:
         rows.append(break_row)
-    rows.append([InlineKeyboardButton("⏹ Закончить день", callback_data="end")])
+    rows.append([InlineKeyboardButton(t("btn_end_day", lang), callback_data="end")])
     return InlineKeyboardMarkup(rows)
 
 
 # ── formatting helpers ────────────────────────────────────────────────────────
 
-def _fmt_time(seconds: int) -> str:
+def _fmt_time(seconds: int, lang: str = "ru") -> str:
     h, m = divmod(seconds // 60, 60)
     if h:
-        return f"{h}ч {m}мин"
-    return f"{m}мин"
+        return t("time_hm", lang, h=h, m=m)
+    return t("time_m", lang, m=m)
 
 
 def _streak_bar(n: int) -> str:
@@ -61,7 +63,6 @@ def _streak_bar(n: int) -> str:
 
 
 async def _fetch_todoist_tasks(token: str) -> list[str]:
-    """Возвращает список названий активных задач на сегодня."""
     if not HAS_HTTPX or not token:
         return []
     headers = {"Authorization": f"Bearer {token}"}
@@ -75,20 +76,18 @@ async def _fetch_todoist_tasks(token: str) -> list[str]:
             if r.status_code != 200:
                 return []
             results = r.json().get("results", [])
-            return [t["content"] for t in results]
+            return [item["content"] for item in results]
     except Exception:
         return []
 
 
 async def _fetch_todoist_stats(token: str) -> dict | None:
-    """Возвращает {completed, total} задач Todoist за сегодня."""
     if not HAS_HTTPX or not token:
         return None
     today = date.today().isoformat()
     headers = {"Authorization": f"Bearer {token}"}
     try:
         async with httpx.AsyncClient(timeout=8) as client:
-            # Активные (невыполненные) задачи на сегодня
             r = await client.get(
                 "https://api.todoist.com/api/v1/tasks",
                 headers=headers,
@@ -96,7 +95,6 @@ async def _fetch_todoist_stats(token: str) -> dict | None:
             )
             active = len(r.json().get("results", [])) if r.status_code == 200 else 0
 
-            # Выполненные сегодня — получаем проекты и запрашиваем архив каждого
             rp = await client.get("https://api.todoist.com/api/v1/projects", headers=headers)
             completed = 0
             if rp.status_code == 200:
@@ -120,100 +118,99 @@ async def _fetch_todoist_stats(token: str) -> dict | None:
 
 
 def _build_end_of_day_report(stats: dict, todoist: dict | None,
+                              incomplete_tasks: list[str],
                               state: AppState) -> str:
-    work_str  = _fmt_time(stats["work_seconds"])
-    break_str = _fmt_time(stats["break_seconds"])
+    lang      = state.language
+    work_str  = _fmt_time(stats["work_seconds"], lang)
+    break_str = _fmt_time(stats["break_seconds"], lang)
     dist      = stats["distractions"]
 
-    # Оценка продуктивности
-    # Фокус (40%): 0% если >10 отвлечений, 100% если 0
     focus_pct = max(0, 1 - dist / 10)
     score = focus_pct * 40
-
-    # Время работы (20%): 8 часов = 100%
     work_pct = min(1, stats["work_seconds"] / (8 * 3600))
     score += work_pct * 20
 
-    # Todoist (40%)
-    todoist_line = ""
     if todoist is None:
-        score += 20  # нейтральный бонус если нет токена
-        todoist_line = "📋 Todoist: не подключён\n"
+        score += 20
+        todoist_line = t("report_todoist_no", lang) + "\n"
     elif todoist["total"] == 0:
         score += 20
-        todoist_line = "📋 Todoist: задач на сегодня нет\n"
+        todoist_line = t("report_todoist_empty", lang) + "\n"
     else:
         t_pct = todoist["completed"] / todoist["total"]
         score += t_pct * 40
-        todoist_line = (
-            f"📋 Todoist: {todoist['completed']}/{todoist['total']} задач "
-            f"({int(t_pct * 100)}%)\n"
-        )
+        todoist_line = t("report_todoist", lang,
+                         done=todoist["completed"],
+                         total=todoist["total"],
+                         pct=int(t_pct * 100)) + "\n"
 
     score = min(10, round(score / 10, 1))
 
     work_hours = stats["work_seconds"] / 3600
     if work_hours >= 9:
-        grade = "⛓ Раб на галерах"
+        grade = t("grade_galley", lang)
     elif work_hours >= 6:
-        grade = "💪 Трудяга-работяга"
+        grade = t("grade_worker", lang)
     elif work_hours >= 3:
-        grade = "📈 Есть куда расти"
+        grade = t("grade_growing", lang)
     else:
-        grade = "🛋 Считай не работал"
+        grade = t("grade_lazy", lang)
 
-    streak_line = (
-        f"🔥 Стрик: {state.streak_days} дн.  "
-        f"⚡ Чистый: {state.streak_clean} дн.  "
-        f"💼 Рабочих: {state.streak_workdays} дн."
-    )
+    streak_line = t("report_streaks", lang,
+                    d=state.streak_days,
+                    c=state.streak_clean,
+                    w=state.streak_workdays)
+
+    overdue_block = ""
+    if incomplete_tasks:
+        task_lines   = "\n".join(f"• {item}" for item in incomplete_tasks)
+        overdue_block = f"\n\n{t('report_overdue', lang)}\n{task_lines}"
 
     return (
-        f"⏹ *День завершён!*\n\n"
-        f"⏱ Работал: {work_str}\n"
-        f"☕ Отдыхал: {break_str}\n"
-        f"🚨 Отвлечений: {dist}\n"
+        f"{t('report_header', lang)}\n\n"
+        f"{t('report_work', lang, t=work_str)}\n"
+        f"{t('report_break', lang, t=break_str)}\n"
+        f"{t('report_dist', lang, n=dist)}\n"
         f"{todoist_line}\n"
         f"{streak_line}\n\n"
-        f"💡 Оценка: *{score}/10* — {grade}"
+        f"{t('report_score', lang, score=score, grade=grade)}"
+        f"{overdue_block}"
     )
 
 
 def _build_weekly_report(state: AppState) -> str:
-    today = date.today()
-    lines = ["📊 *Итоги недели*\n"]
+    lang     = state.language
+    today    = date.today()
+    weekdays = t("weekdays", lang)
+    lines    = [t("week_header", lang) + "\n"]
     total_work = 0
     total_dist = 0
-    total_done = 0
-    best_day = None
-    best_work = 0
+    best_day   = None
+    best_work  = 0
 
     for i in range(6, -1, -1):
-        d = today - timedelta(days=i)
+        d  = today - timedelta(days=i)
         ds = d.isoformat()
-        wd = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"][d.weekday()]
+        wd = weekdays[d.weekday()]
         if ds in state.daily_stats:
-            st = state.daily_stats[ds]
-            w = st["work_seconds"]
+            st    = state.daily_stats[ds]
+            w     = st["work_seconds"]
             total_work += w
             total_dist += st["distractions"]
             hours = w / 3600
-            bar = "█" * int(hours) + "░" * max(0, 8 - int(hours))
-            lines.append(f"{wd} {bar} {_fmt_time(w)}")
+            bar   = "█" * int(hours) + "░" * max(0, 8 - int(hours))
+            lines.append(f"{wd} {bar} {_fmt_time(w, lang)}")
             if w > best_work:
                 best_work = w
-                best_day = wd
+                best_day  = wd
         else:
             lines.append(f"{wd} ░░░░░░░░ —")
 
-    lines.append(f"\n⏱ Всего: {_fmt_time(total_work)}")
-    lines.append(f"🚨 Отвлечений: {total_dist}")
-    lines.append(
-        f"🔥 Стрик: {state.streak_days} дн. | "
-        f"💼 Рабочих: {state.streak_workdays} дн."
-    )
+    lines.append(f"\n{t('week_total', lang, t=_fmt_time(total_work, lang))}")
+    lines.append(t("week_dist", lang, n=total_dist))
+    lines.append(t("week_streaks", lang, d=state.streak_days, w=state.streak_workdays))
     if best_day:
-        lines.append(f"\n🏆 Лучший день: {best_day}")
+        lines.append(f"\n{t('week_best', lang, day=best_day)}")
     return "\n".join(lines)
 
 
@@ -234,6 +231,13 @@ class FocusBot:
         self._app.add_handler(CommandHandler("start",        self._cmd_start))
         self._app.add_handler(CommandHandler("achievements", self._cmd_achievements))
         self._app.add_handler(CallbackQueryHandler(self._on_button))
+
+    def _sync_lang(self, update: Update):
+        lang_code = update.effective_user.language_code if update.effective_user else None
+        lang = detect_lang(lang_code)
+        if lang != self._state.language:
+            self._state.language = lang
+            self._state.save()
 
     # ── send helpers ──────────────────────────────────────────────────────────
 
@@ -270,16 +274,19 @@ class FocusBot:
                         pass
 
     async def _notify_achievements(self, new_achs):
+        lang = self._state.language
         for ach in new_achs:
-            await self.send(format_achievement(ach))
+            await self.send(format_achievement(ach, lang))
 
     # ── command handlers ──────────────────────────────────────────────────────
 
     async def _cmd_start(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         if update.effective_chat.id != self._chat_id:
             return
+        self._sync_lang(update)
+        lang = self._state.language
         msg = await update.message.reply_text(
-            "👋 Привет! Я твой фокус-бот.",
+            t("welcome", lang),
             reply_markup=_keyboard_for_state(self._state),
         )
         self._state.add_message_id(msg.message_id)
@@ -287,9 +294,11 @@ class FocusBot:
     async def _cmd_achievements(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         if update.effective_chat.id != self._chat_id:
             return
+        self._sync_lang(update)
+        lang = self._state.language
         from achievements import all_achievements_text
         await update.message.reply_text(
-            f"🏅 *Твои ачивки*\n\n{all_achievements_text(self._state)}",
+            f"{t('ach_header', lang)}\n\n{all_achievements_text(self._state, lang)}",
             parse_mode="Markdown",
         )
 
@@ -297,6 +306,8 @@ class FocusBot:
         query = update.callback_query
         if update.effective_chat.id != self._chat_id:
             return
+        self._sync_lang(update)
+        lang = self._state.language
         await query.answer()
         data = query.data
 
@@ -308,39 +319,34 @@ class FocusBot:
             left_min = int(self._state.planning_seconds_left() // 60)
             tasks = await _fetch_todoist_tasks(self._todoist_token)
             if tasks:
-                task_lines = "\n".join(f"• {t}" for t in tasks)
-                tasks_block = f"\n\n📌 *Задачи на сегодня:*\n{task_lines}"
+                task_lines  = "\n".join(f"• {item}" for item in tasks)
+                tasks_block = f"\n\n{t('planning_tasks', lang)}\n{task_lines}"
             else:
                 tasks_block = ""
-            await self.send_menu(
-                f"📋 *Время планирования!*\n"
-                f"У тебя {left_min} минут чтобы составить план на день в Todoist.\n"
-                f"Когда готов — нажми кнопку ниже."
-                f"{tasks_block}"
-            )
+            await self.send_menu(t("planning_start", lang, mins=left_min) + tasks_block)
             self._schedule_planning_watcher()
 
-        elif data == "ready" or data == "skip_plan":
+        elif data in ("ready", "skip_plan"):
             if not self._state.is_planning:
                 return
             if self._planning_task and not self._planning_task.done():
                 self._planning_task.cancel()
             self._state.start_working()
-            await self.send_menu("🚀 Рабочий день начат! Удачи 💪")
+            await self.send_menu(t("day_started", lang))
             await self._notify_achievements(check_new_achievements(self._state))
 
         elif data == "break_short":
             if not self._state.is_working:
                 return
             self._state.start_break(long=False)
-            await self.send_menu("⏸ Перерыв 15 минут. Отдыхай!")
+            await self.send_menu(t("break_short_start", lang))
             self._schedule_break_watcher()
 
         elif data == "break_long":
             if not self._state.is_working:
                 return
             self._state.start_break(long=True)
-            await self.send_menu("🍽 Обед 60 минут. Приятного аппетита!")
+            await self.send_menu(t("break_long_start", lang))
             self._schedule_break_watcher()
 
         elif data == "return_break":
@@ -349,15 +355,15 @@ class FocusBot:
             if self._break_task and not self._break_task.done():
                 self._break_task.cancel()
             self._state.finish_break()
-            await self.send_menu("🏃 Вернулся досрочно! Продолжаем 💪")
+            await self.send_menu(t("return_early", lang))
 
         elif data == "end":
-            stats = self._state.end_day()
-            todoist = await _fetch_todoist_stats(self._todoist_token)
-            report = _build_end_of_day_report(stats, todoist, self._state)
+            incomplete = await _fetch_todoist_tasks(self._todoist_token)
+            stats      = self._state.end_day()
+            todoist    = await _fetch_todoist_stats(self._todoist_token)
+            report     = _build_end_of_day_report(stats, todoist, incomplete, self._state)
             await self.send_menu(report)
-            new_achs = check_new_achievements(self._state)
-            await self._notify_achievements(new_achs)
+            await self._notify_achievements(check_new_achievements(self._state))
 
     # ── watchers ──────────────────────────────────────────────────────────────
 
@@ -369,7 +375,7 @@ class FocusBot:
         )
 
     async def _on_planning_ended(self):
-        await self.send_menu("⏱ Время планирования вышло. *Рабочий день начат!* 🚀")
+        await self.send_menu(t("planning_ended", self._state.language))
         await self._notify_achievements(check_new_achievements(self._state))
 
     def _schedule_break_watcher(self):
@@ -380,7 +386,7 @@ class FocusBot:
         )
 
     async def _on_break_ended(self):
-        await self.send_menu("⏰ Перерыв закончился, возвращайся к работе! 💼")
+        await self.send_menu(t("break_ended", self._state.language))
 
     # ── weekly report scheduler ───────────────────────────────────────────────
 
@@ -396,16 +402,14 @@ class FocusBot:
     async def notify_idle(self, repeat: bool):
         if self._state.is_on_break or self._state.is_off or self._state.is_planning:
             return
-        if repeat:
-            await self.send("👀 Всё ещё здесь?")
-        else:
-            await self.send("😴 Ты куда пропал? Вернись к работе!")
+        lang = self._state.language
+        await self.send(t("idle_repeat" if repeat else "idle_first", lang))
 
     async def notify_distraction(self, app_name: str):
         if self._state.is_on_break or self._state.is_off or self._state.is_planning:
             return
         self._state.add_distraction()
-        await self.send(f"🚨 Это {app_name}, не работа! Закрывай и фокусируйся.")
+        await self.send(t("distraction", self._state.language, app=app_name))
 
     # ── run ───────────────────────────────────────────────────────────────────
 
@@ -421,27 +425,36 @@ class FocusBot:
         await self._app.updater.start_polling(drop_pending_updates=True)
 
     async def _send_startup_message(self):
+        lang  = self._state.language
+        today = date.today().isoformat()
         if self._state.is_working:
+            lunch_str = t("lunch_used" if self._state.long_breaks_today else "lunch_avail", lang)
             await self.send_menu(
-                f"🔄 Бот перезапущен. Рабочий день уже идёт 💪\n"
-                f"Перерывов: {self._state.short_breaks_today}/{MAX_SHORT_BREAKS}  |  "
-                f"Обед: {'❌ использован' if self._state.long_breaks_today else '✅ доступен'}\n"
-                f"{_streak_bar(self._state.streak_days)} {self._state.streak_days} дн."
+                t("restart_working", lang,
+                  sb=self._state.short_breaks_today,
+                  max_sb=MAX_SHORT_BREAKS,
+                  lunch=lunch_str,
+                  streak_bar=_streak_bar(self._state.streak_days),
+                  streak=self._state.streak_days)
             )
         elif self._state.is_planning:
             mins = int(self._state.planning_seconds_left() // 60)
-            await self.send_menu(f"🔄 Бот перезапущен. Осталось {mins} мин на планирование 📋")
+            await self.send_menu(t("restart_planning", lang, mins=mins))
         elif self._state.is_on_break:
             mins = int(self._state.break_seconds_left() // 60)
             secs = int(self._state.break_seconds_left() % 60)
-            await self.send_menu(f"🔄 Бот перезапущен. Ты на перерыве — осталось {mins}м {secs}с")
+            await self.send_menu(t("restart_break", lang, mins=mins, secs=secs))
         else:
-            await self.send_menu(
-                f"🤖 Бот запущен. Нажми ▶️ чтобы начать день!\n"
-                f"{_streak_bar(self._state.streak_days)} {self._state.streak_days} дн."
-                if self._state.streak_days > 0
-                else "🤖 Бот запущен. Нажми ▶️ чтобы начать день!"
-            )
+            # Не отправлять повторно если уже отправляли сегодня
+            # (защита от второго компьютера, запускающего бот в середине дня)
+            if self._state.startup_notified_date == today:
+                return
+            self._state.startup_notified_date = today
+            self._state.save()
+            text = t("start_day_prompt", lang)
+            if self._state.streak_days > 0:
+                text += f"\n{_streak_bar(self._state.streak_days)} {self._state.streak_days} {t('days_abbr', lang)}"
+            await self.send_menu(text)
 
     async def stop(self):
         if self._weekly_task:

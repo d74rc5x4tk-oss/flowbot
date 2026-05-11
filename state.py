@@ -76,6 +76,8 @@ class AppState:
         self.sent_message_ids: list[int] = []
         self.achievements: list[str] = []
         self.daily_stats: dict = {}           # date_str → {work_sec, break_sec, distractions, score}
+        self.language: str = "ru"
+        self.startup_notified_date: str = ""
 
         self._load()
 
@@ -104,6 +106,8 @@ class AppState:
                 self.sent_message_ids    = d.get("sent_message_ids", [])
                 self.achievements        = d.get("achievements", [])
                 self.daily_stats         = d.get("daily_stats", {})
+                self.language                = d.get("language", "ru")
+                self.startup_notified_date   = d.get("startup_notified_date", "")
                 if self.mode in ("planning", "working"):
                     self._work_segment_start = _time.time()
                 self._midnight_reset()
@@ -132,6 +136,8 @@ class AppState:
                 "sent_message_ids":   self.sent_message_ids,
                 "achievements":       self.achievements,
                 "daily_stats":        self.daily_stats,
+                "language":                self.language,
+                "startup_notified_date":   self.startup_notified_date,
             }, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
