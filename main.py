@@ -41,23 +41,20 @@ if SYSTEM == "Darwin":
 
 
 def _kill_sibling_instances():
-    """Убивает все другие экземпляры бота (python/pythonw running main.py из той же папки)."""
+    """Убивает только python-процессы, запущенные из нашей папки (main.py)."""
     current_pid = os.getpid()
+    our_main = os.path.join(SCRIPT_DIR, "main.py").replace('\\', '/').lower()
     try:
         result = subprocess.run(
-            ['wmic', 'process', 'get', 'processid,commandline', '/format:csv'],
+            ['wmic', 'process', 'get', 'name,processid,commandline', '/format:csv'],
             capture_output=True, text=True, timeout=5
         )
         for line in result.stdout.splitlines():
-            if 'main.py' not in line:
-                continue
-            norm_line = line.replace('\\', '/').lower()
-            norm_dir  = SCRIPT_DIR.replace('\\', '/').lower()
-            if norm_dir not in norm_line:
+            norm = line.replace('\\', '/').lower()
+            # Только python-процессы с точным путём к нашему main.py
+            if 'python' not in norm or our_main not in norm:
                 continue
             parts = line.strip().split(',')
-            if not parts:
-                continue
             try:
                 pid = int(parts[-1].strip())
                 if pid != current_pid and pid > 0:
