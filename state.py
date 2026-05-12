@@ -56,6 +56,7 @@ class AppState:
         # Счётчики перерывов за день
         self.short_breaks_today: int = 0
         self.long_breaks_today: int = 0
+        self.break_duration: int = 0
 
         # Стрики
         self.streak_days: int = 0             # календарные дни подряд
@@ -94,6 +95,7 @@ class AppState:
                 self.planning_end_time   = d.get("planning_end_time")
                 self.short_breaks_today  = d.get("short_breaks_today", 0)
                 self.long_breaks_today   = d.get("long_breaks_today", 0)
+                self.break_duration      = d.get("break_duration", 0)
                 self.streak_days         = d.get("streak_days", 0)
                 self.streak_clean        = d.get("streak_clean", 0)
                 self.streak_workdays     = d.get("streak_workdays", 0)
@@ -125,6 +127,7 @@ class AppState:
                 "planning_end_time":  self.planning_end_time,
                 "short_breaks_today": self.short_breaks_today,
                 "long_breaks_today":  self.long_breaks_today,
+                "break_duration":     self.break_duration,
                 "streak_days":        self.streak_days,
                 "streak_clean":       self.streak_clean,
                 "streak_workdays":    self.streak_workdays,
@@ -218,7 +221,7 @@ class AppState:
 
     def _flush_break_segment(self):
         if self.break_end is not None:
-            elapsed = BREAK_LONG if self.break_type == "long" else BREAK_SHORT
+            elapsed = self.break_duration or (BREAK_LONG if self.break_type == "long" else BREAK_SHORT)
             left = self.break_seconds_left()
             self.total_break_seconds += int(elapsed - left)
 
@@ -278,10 +281,11 @@ class AppState:
 
     def start_break(self, long: bool = False):
         self._flush_work_segment()
-        duration        = BREAK_LONG if long else BREAK_SHORT
-        self.mode       = "break"
-        self.break_end  = _time.time() + duration
-        self.break_type = "long" if long else "short"
+        duration            = BREAK_LONG if long else BREAK_SHORT
+        self.mode           = "break"
+        self.break_end      = _time.time() + duration
+        self.break_type     = "long" if long else "short"
+        self.break_duration = duration
         if long:
             self.long_breaks_today += 1
         else:
@@ -289,11 +293,19 @@ class AppState:
         self.save()
         return duration
 
+    def extend_break(self):
+        """Продлить короткий перерыв ещё на 15 минут, потратив ещё один слот."""
+        self.break_end = (self.break_end or _time.time()) + BREAK_SHORT
+        self.break_duration += BREAK_SHORT
+        self.short_breaks_today += 1
+        self.save()
+
     def finish_break(self):
         self._flush_break_segment()
-        self.mode       = "working"
-        self.break_end  = None
-        self.break_type = None
+        self.mode           = "working"
+        self.break_end      = None
+        self.break_type     = None
+        self.break_duration = 0
         self._work_segment_start = _time.time()
         self.save()
 
@@ -326,6 +338,10 @@ class AppState:
     @property
     def can_long_break(self) -> bool:
         return self.long_breaks_today < MAX_LONG_BREAKS
+
+    @property
+    def can_extend_break(self) -> bool:
+        return self.is_on_break and self.break_type == "short" and self.can_short_break
 
     def break_seconds_left(self) -> float:
         if self.break_end is None:

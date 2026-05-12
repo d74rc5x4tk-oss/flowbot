@@ -30,9 +30,14 @@ def _keyboard_for_state(state: AppState) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(t("btn_skip_plan", lang), callback_data="skip_plan")],
         ])
     if state.is_on_break:
-        return InlineKeyboardMarkup([
-            [InlineKeyboardButton(t("btn_return_break", lang), callback_data="return_break")],
-        ])
+        rows = []
+        if state.can_extend_break:
+            left = MAX_SHORT_BREAKS - state.short_breaks_today
+            rows.append([InlineKeyboardButton(
+                t("btn_extend_break", lang, left=left), callback_data="extend_break"
+            )])
+        rows.append([InlineKeyboardButton(t("btn_return_break", lang), callback_data="return_break")])
+        return InlineKeyboardMarkup(rows)
     # working
     break_row = []
     if state.can_short_break:
@@ -348,6 +353,17 @@ class FocusBot:
             self._state.start_break(long=True)
             await self.send_menu(t("break_long_start", lang))
             self._schedule_break_watcher()
+
+        elif data == "extend_break":
+            if not self._state.can_extend_break:
+                return
+            self._state.extend_break()
+            if self._break_task and not self._break_task.done():
+                self._break_task.cancel()
+            self._schedule_break_watcher()
+            left = MAX_SHORT_BREAKS - self._state.short_breaks_today
+            total_min = self._state.break_duration // 60
+            await self.send_menu(t("break_extended", lang, left=left, total=total_min))
 
         elif data == "return_break":
             if not self._state.is_on_break:

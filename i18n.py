@@ -5,7 +5,8 @@ _T = {
     "btn_start":        {"ru": "▶️ Начать рабочий день",          "en": "▶️ Start work day"},
     "btn_ready":        {"ru": "✅ Готов, начинаем работать!",     "en": "✅ Ready, let's work!"},
     "btn_skip_plan":    {"ru": "⏭ Пропустить планирование",       "en": "⏭ Skip planning"},
-    "btn_return_break": {"ru": "🏃 Вернуться к работе досрочно",   "en": "🏃 Return early"},
+    "btn_return_break":  {"ru": "🏃 Вернуться к работе",            "en": "🏃 Return to work"},
+    "btn_extend_break":  {"ru": "➕ +15 мин ({left} ост.)",         "en": "➕ +15 min ({left} left)"},
     "btn_break_short":  {"ru": "⏸ Перерыв 15 мин ({left} ост.)", "en": "⏸ Break 15 min ({left} left)"},
     "btn_lunch":        {"ru": "🍽 Обед 60 мин",                   "en": "🍽 Lunch 60 min"},
     "btn_end_day":      {"ru": "⏹ Закончить день",                "en": "⏹ End day"},
@@ -29,6 +30,7 @@ _T = {
     "break_short_start": {"ru": "⏸ Перерыв 15 минут. Отдыхай!",  "en": "⏸ 15-minute break. Rest up!"},
     "break_long_start":  {"ru": "🍽 Обед 60 минут. Приятного аппетита!", "en": "🍽 60-minute lunch. Enjoy your meal!"},
     "break_ended":       {"ru": "⏰ Перерыв закончился, возвращайся к работе! 💼", "en": "⏰ Break is over, get back to work! 💼"},
+    "break_extended":    {"ru": "➕ Перерыв продлён до {total} мин. Осталось слотов: {left} 😌", "en": "➕ Break extended to {total} min. Slots left: {left} 😌"},
     "return_early":      {"ru": "🏃 Вернулся досрочно! Продолжаем 💪", "en": "🏃 Returned early! Let's keep going 💪"},
 
     # ── notifications ──────────────────────────────────────────────────────────
