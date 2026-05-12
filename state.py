@@ -95,6 +95,7 @@ class AppState:
         self.language: str = "ru"
         self.startup_notified_date: str = ""
         self.session_started_date: str = ""
+        self.telegram_sync_msg_id: int | None = None
 
         self._load()
 
@@ -127,6 +128,7 @@ class AppState:
                 self.language                = d.get("language", "ru")
                 self.startup_notified_date   = d.get("startup_notified_date", "")
                 self.session_started_date    = d.get("session_started_date", "")
+                self.telegram_sync_msg_id    = d.get("telegram_sync_msg_id")
                 if self.mode in ("planning", "working"):
                     self._work_segment_start = _time.time()
                 if self.mode == "break" and self.break_duration == 0:
@@ -161,6 +163,7 @@ class AppState:
                 "language":                self.language,
                 "startup_notified_date":   self.startup_notified_date,
                 "session_started_date":    self.session_started_date,
+                "telegram_sync_msg_id":    self.telegram_sync_msg_id,
             }, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
@@ -218,6 +221,39 @@ class AppState:
             self.last_clean_date = today_str
         else:
             self.streak_clean = 0
+
+    def _apply_remote_dict(self, d: dict, sync_msg_id: int | None = None):
+        """Применяем состояние с другого устройства без midnight_reset."""
+        self.mode                = d.get("mode", "off")
+        self.break_end           = d.get("break_end")
+        self.break_type          = d.get("break_type")
+        self.planning_end_time   = d.get("planning_end_time")
+        self.short_breaks_today  = d.get("short_breaks_today", 0)
+        self.long_breaks_today   = d.get("long_breaks_today", 0)
+        self.break_duration      = d.get("break_duration", 0)
+        self.streak_days         = d.get("streak_days", 0)
+        self.streak_clean        = d.get("streak_clean", 0)
+        self.streak_workdays     = d.get("streak_workdays", 0)
+        self.last_work_date      = d.get("last_work_date", "")
+        self.last_clean_date     = d.get("last_clean_date", "")
+        self.last_workday_date   = d.get("last_workday_date", "")
+        self.distractions_today  = d.get("distractions_today", 0)
+        self.total_work_seconds  = d.get("total_work_seconds", 0)
+        self.total_break_seconds = d.get("total_break_seconds", 0)
+        self.day_started         = d.get("day_started")
+        self.sent_message_ids    = d.get("sent_message_ids", [])
+        self.achievements        = d.get("achievements", [])
+        self.daily_stats         = d.get("daily_stats", {})
+        self.language                = d.get("language", "ru")
+        self.startup_notified_date   = d.get("startup_notified_date", "")
+        self.session_started_date    = d.get("session_started_date", "")
+        if sync_msg_id:
+            self.telegram_sync_msg_id = sync_msg_id
+        if self.mode in ("planning", "working"):
+            self._work_segment_start = _time.time()
+        elif self.mode == "break" and self.break_duration == 0:
+            self.break_duration = BREAK_LONG if self.break_type == "long" else BREAK_SHORT
+        self.save()
 
     # ── message id tracking ───────────────────────────────────────────────────
 

@@ -1,4 +1,5 @@
 import asyncio
+import json as _json
 import os
 from datetime import date, datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Message
@@ -14,6 +15,8 @@ try:
     HAS_HTTPX = True
 except ImportError:
     HAS_HTTPX = False
+
+_SYNC_MARKER = "⚙️sync:"
 
 
 # ── keyboards ─────────────────────────────────────────────────────────────────
@@ -264,8 +267,10 @@ class FocusBot:
         return msg
 
     async def send_menu(self, text: str, parse_mode="Markdown") -> Message:
-        return await self.send(text, reply_markup=_keyboard_for_state(self._state),
-                               parse_mode=parse_mode)
+        msg = await self.send(text, reply_markup=_keyboard_for_state(self._state),
+                              parse_mode=parse_mode)
+        asyncio.create_task(self._push_state_to_telegram())
+        return msg
 
     async def clear_chat(self):
         ids = self._state.sent_message_ids
@@ -434,12 +439,82 @@ class FocusBot:
         self._state.add_distraction()
         await self.send(t("distraction", self._state.language, app=app_name))
 
+    # ── telegram state sync ───────────────────────────────────────────────────
+
+    async def _pull_state_from_telegram(self):
+        """На старте — читаем состояние из закреплённого сообщения (кросс-устройство)."""
+        if self._state.mode != "off":
+            return  # Не перезаписываем уже активную сессию
+        try:
+            chat = await self._app.bot.get_chat(self._chat_id)
+            pm = chat.pinned_message
+            if not (pm and pm.text and _SYNC_MARKER in pm.text):
+                return
+            json_str = pm.text.split(_SYNC_MARKER, 1)[1].strip()
+            data = _json.loads(json_str)
+            if data.get("day_started") != date.today().isoformat():
+                return  # Данные устарели
+            if data.get("mode") == "off":
+                return  # Нечего применять
+            self._state._apply_remote_dict(data, pm.message_id)
+        except Exception:
+            pass
+
+    async def _push_state_to_telegram(self):
+        """Сохраняем текущее состояние в закреплённое сообщение (кросс-устройство)."""
+        try:
+            mode_emoji = {"off": "⭕", "planning": "📋", "working": "🟢", "break": "☕"}.get(
+                self._state.mode, "?"
+            )
+            state_json = _json.dumps({
+                "mode":                  self._state.mode,
+                "break_end":             self._state.break_end,
+                "break_type":            self._state.break_type,
+                "planning_end_time":     self._state.planning_end_time,
+                "short_breaks_today":    self._state.short_breaks_today,
+                "long_breaks_today":     self._state.long_breaks_today,
+                "break_duration":        self._state.break_duration,
+                "streak_days":           self._state.streak_days,
+                "streak_clean":          self._state.streak_clean,
+                "streak_workdays":       self._state.streak_workdays,
+                "last_work_date":        self._state.last_work_date,
+                "last_clean_date":       self._state.last_clean_date,
+                "last_workday_date":     self._state.last_workday_date,
+                "distractions_today":    self._state.distractions_today,
+                "total_work_seconds":    self._state.total_work_seconds,
+                "total_break_seconds":   self._state.total_break_seconds,
+                "day_started":           self._state.day_started,
+                "sent_message_ids":      self._state.sent_message_ids,
+                "achievements":          self._state.achievements,
+                "daily_stats":           self._state.daily_stats,
+                "language":              self._state.language,
+                "startup_notified_date": self._state.startup_notified_date,
+                "session_started_date":  self._state.session_started_date,
+            }, ensure_ascii=False, separators=(',', ':'))
+            text = f"🤖 FlowBot {mode_emoji}\n{_SYNC_MARKER}{state_json}"
+            mid = self._state.telegram_sync_msg_id
+            if mid:
+                await self._app.bot.edit_message_text(
+                    chat_id=self._chat_id, message_id=mid, text=text
+                )
+            else:
+                msg = await self._app.bot.send_message(chat_id=self._chat_id, text=text)
+                await self._app.bot.pin_chat_message(
+                    chat_id=self._chat_id, message_id=msg.message_id,
+                    disable_notification=True,
+                )
+                self._state.telegram_sync_msg_id = msg.message_id
+                self._state.save()
+        except Exception:
+            pass
+
     # ── run ───────────────────────────────────────────────────────────────────
 
     async def run(self):
         await self._app.initialize()
         await self._app.start()
         self._weekly_task = asyncio.create_task(self._weekly_report_loop())
+        await self._pull_state_from_telegram()
         if self._state.is_on_break:
             self._schedule_break_watcher()
         if self._state.is_planning:
