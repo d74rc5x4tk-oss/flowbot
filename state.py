@@ -1,10 +1,25 @@
 import json
+import os
 import asyncio
 import time as _time
 from datetime import date, timedelta
 from pathlib import Path
 
-STATE_FILE = Path(__file__).parent / "state.json"
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+def _resolve_state_file() -> Path:
+    custom = os.getenv("STATE_FILE")
+    if custom:
+        p = Path(custom).expanduser()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        return p
+    return Path(__file__).parent / "state.json"
+
+STATE_FILE = _resolve_state_file()
 
 BREAK_SHORT      = 15 * 60
 BREAK_LONG       = 60 * 60
