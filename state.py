@@ -114,6 +114,8 @@ class AppState:
                 self.session_started_date    = d.get("session_started_date", "")
                 if self.mode in ("planning", "working"):
                     self._work_segment_start = _time.time()
+                if self.mode == "break" and self.break_duration == 0:
+                    self.break_duration = BREAK_LONG if self.break_type == "long" else BREAK_SHORT
                 self._midnight_reset()
             except Exception:
                 pass
