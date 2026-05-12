@@ -67,6 +67,14 @@ def _streak_bar(n: int) -> str:
     return "🔥" * min(n, 7) + (f" ×{n}" if n > 7 else "")
 
 
+def _is_due_today_or_overdue(task: dict) -> bool:
+    due = task.get("due")
+    if not due:
+        return False
+    due_date = (due.get("date") or "")[:10]  # YYYY-MM-DD
+    return bool(due_date) and due_date <= date.today().isoformat()
+
+
 async def _fetch_todoist_tasks(token: str) -> list[str]:
     if not HAS_HTTPX or not token:
         return []
@@ -76,12 +84,11 @@ async def _fetch_todoist_tasks(token: str) -> list[str]:
             r = await client.get(
                 "https://api.todoist.com/api/v1/tasks",
                 headers=headers,
-                params={"filter": "today | overdue"},
             )
             if r.status_code != 200:
                 return []
             results = r.json().get("results", [])
-            return [item["content"] for item in results]
+            return [item["content"] for item in results if _is_due_today_or_overdue(item)]
     except Exception:
         return []
 
@@ -96,9 +103,9 @@ async def _fetch_todoist_stats(token: str) -> dict | None:
             r = await client.get(
                 "https://api.todoist.com/api/v1/tasks",
                 headers=headers,
-                params={"filter": "today | overdue"},
             )
-            active = len(r.json().get("results", [])) if r.status_code == 200 else 0
+            all_tasks = r.json().get("results", []) if r.status_code == 200 else []
+            active = sum(1 for t in all_tasks if _is_due_today_or_overdue(t))
 
             rp = await client.get("https://api.todoist.com/api/v1/projects", headers=headers)
             completed = 0
