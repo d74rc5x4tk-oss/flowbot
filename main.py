@@ -40,10 +40,40 @@ if SYSTEM == "Darwin":
         pass
 
 
+def _kill_sibling_instances():
+    """Убивает все другие экземпляры бота (python/pythonw running main.py из той же папки)."""
+    current_pid = os.getpid()
+    try:
+        result = subprocess.run(
+            ['wmic', 'process', 'get', 'processid,commandline', '/format:csv'],
+            capture_output=True, text=True, timeout=5
+        )
+        for line in result.stdout.splitlines():
+            if 'main.py' not in line:
+                continue
+            norm_line = line.replace('\\', '/').lower()
+            norm_dir  = SCRIPT_DIR.replace('\\', '/').lower()
+            if norm_dir not in norm_line:
+                continue
+            parts = line.strip().split(',')
+            if not parts:
+                continue
+            try:
+                pid = int(parts[-1].strip())
+                if pid != current_pid and pid > 0:
+                    subprocess.run(['taskkill', '/F', '/PID', str(pid)],
+                                   capture_output=True, timeout=3)
+            except (ValueError, subprocess.TimeoutExpired):
+                pass
+    except Exception:
+        pass
+
+
 def _restart_bot():
-    """Запускает новый экземпляр и завершает текущий."""
+    """Убивает все экземпляры, запускает один новый и завершает текущий."""
     def do_restart():
         import time
+        _kill_sibling_instances()
         time.sleep(1)  # дать Telegram время закрыть соединение
         kwargs = {"cwd": SCRIPT_DIR}
         if SYSTEM == "Windows":
@@ -71,6 +101,7 @@ def _start_windows_tray():
 
     def on_quit(icon, item):
         icon.stop()
+        _kill_sibling_instances()
         os._exit(0)
 
     lang = os_lang()
